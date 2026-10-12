@@ -1,0 +1,857 @@
+<meta charset="utf-8">
+<title>Palette Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;1,8..60,400&display=swap">
+<style>
+/* Layout: conversation on the left, the colour disc and swatches on the right.
+   The surround is a neutral grey on purpose: colours are judged against a neutral, not against a tinted page. */
+:root {
+  --bg: #d9d9d6;          /* neutral surround */
+  --panel: #e8e8e5;       /* working surfaces */
+  --card: #f4f4f1;        /* the artist's messages, inputs */
+  --line: #bdbdb8;        /* hairlines */
+  --fg: #1c1b19;          /* ink */
+  --muted: #5e5d58;       /* labels */
+  --dim: #85847e;         /* comments */
+  --accent: #9b3a22;      /* the one accent, shared with the posters */
+  --you: #2e2d2a;         /* the artist's bubbles */
+  --you-fg: #f1f0ec;
+  --st-idle: #85847e; --st-busy: #2f6f9e; --st-done: #3a7f4c; --st-err: #b23a2b;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --serif: "Source Serif 4", "Source Serif Pro", Georgia, "Times New Roman", serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #2b2b29; --panel: #343432; --card: #3d3d3a; --line: #4c4c48; --fg: #e6e5e0; --muted: #a9a8a1; --dim: #7f7e78;
+    --accent: #d77a5e; --you: #cfcec8; --you-fg: #1c1b19; --st-idle: #7f7e78; --st-busy: #6aa8d6; --st-done: #6fb47f; --st-err: #e0715f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #2b2b29; --panel: #343432; --card: #3d3d3a; --line: #4c4c48; --fg: #e6e5e0; --muted: #a9a8a1; --dim: #7f7e78;
+  --accent: #d77a5e; --you: #cfcec8; --you-fg: #1c1b19; --st-idle: #7f7e78; --st-busy: #6aa8d6; --st-done: #6fb47f; --st-err: #e0715f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { background: var(--bg); }
+body { margin: 0; color: var(--fg); font-family: var(--mono); font-size: 12px; line-height: 1.5; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 16px; padding-block: 18px 40px; display: flex; flex-direction: column; gap: 12px; }
+button, input, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); padding-bottom: 8px; flex-wrap: wrap; }
+.brand { letter-spacing: .22em; font-size: 13px; font-weight: 500; }
+.ver { color: var(--muted); letter-spacing: .18em; font-size: 10px; }
+
+.status { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 10.5px; letter-spacing: .14em; flex-wrap: wrap; }
+.status b { color: var(--fg); font-weight: 500; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--st-idle); margin-right: 8px; vertical-align: 0; }
+.dot.busy { background: var(--st-busy); } .dot.done { background: var(--st-done); } .dot.err { background: var(--st-err); }
+@media (prefers-reduced-motion: no-preference) { .dot.busy { animation: pulse 1s ease-in-out infinite; } }
+@keyframes pulse { 50% { opacity: .35; } }
+
+button { background: var(--card); border: 1px solid var(--line); padding: 6px 12px; letter-spacing: .14em; font-size: 10.5px; cursor: pointer; border-radius: 2px; }
+button:hover:not(:disabled) { border-color: var(--fg); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+button.small { padding: 3px 8px; font-size: 10px; }
+button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+
+/* model settings, shown only outside Claude (same panel as Sketch Lab) */
+.engine { background: var(--panel); border: 1px solid var(--line); padding: 6px 10px; }
+.engine summary { cursor: pointer; display: flex; gap: 10px; align-items: baseline; color: var(--muted); }
+.k { letter-spacing: .18em; font-size: 10px; color: var(--muted); }
+.eng-sum { color: var(--fg); font-size: 11px; overflow-wrap: anywhere; }
+.eng-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 12px; align-items: center; margin-top: 10px; }
+.eng-grid label, .eng-k { letter-spacing: .16em; font-size: 10px; color: var(--muted); }
+.eng-grid input[type=text], .eng-grid input[type=password] { background: var(--card); border: 1px solid var(--line); padding: 5px 8px; font-size: 11.5px; width: 100%; min-width: 0; }
+.eng-check { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--muted); }
+.eng-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+.eng-status { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.eng-status.ok { color: var(--st-done); } .eng-status.bad { color: var(--st-err); }
+.eng-help { color: var(--dim); font-size: 10.5px; margin: 8px 0 2px; }
+.eng-help code { color: var(--fg); }
+
+.notice { border: 1px solid var(--line); color: var(--muted); padding: 8px 12px; font-size: 11px; background: var(--panel); }
+.err { border: 1px solid var(--st-err); color: var(--st-err); padding: 8px 12px; font-size: 11px; overflow-wrap: anywhere; background: var(--panel); }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); gap: 16px; align-items: start; }
+@media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
+
+/* conversation */
+.talk { background: var(--panel); border: 1px solid var(--line); display: flex; flex-direction: column; min-height: 520px; max-height: 78vh; }
+.talk-head { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 12px; border-bottom: 1px solid var(--line); gap: 8px; }
+.log { flex: 1; overflow-y: auto; padding: 14px 12px; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.msg { max-width: 92%; font-family: var(--serif); font-size: 15px; line-height: 1.55; }
+.msg.ai { align-self: flex-start; }
+.msg.ai .who { font-family: var(--mono); font-size: 9.5px; letter-spacing: .18em; color: var(--dim); display: block; margin-bottom: 2px; }
+.msg.you { align-self: flex-end; background: var(--you); color: var(--you-fg); padding: 8px 12px; border-radius: 10px 10px 2px 10px; font-size: 14px; }
+.msg p { margin: 0 0 6px; } .msg p:last-child { margin: 0; }
+.act { align-self: center; font-size: 10.5px; color: var(--muted); letter-spacing: .06em; display: flex; align-items: center; gap: 6px; text-align: center; }
+.act i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; border: 1px solid var(--line); flex: none; }
+.held { align-self: flex-start; font-size: 10.5px; color: var(--accent); letter-spacing: .04em; border-left: 2px solid var(--accent); padding-left: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font-family: var(--serif); font-size: 13px; letter-spacing: 0; padding: 4px 10px; border-radius: 12px; background: var(--card); }
+.typing { color: var(--dim); font-size: 10.5px; letter-spacing: .14em; }
+.compose { border-top: 1px solid var(--line); padding: 10px 12px; display: flex; gap: 8px; align-items: flex-end; }
+.compose textarea { flex: 1; min-width: 0; resize: none; height: 58px; background: var(--card); border: 1px solid var(--line); padding: 8px 10px; font-family: var(--serif); font-size: 14px; line-height: 1.45; }
+.compose .btns { display: flex; flex-direction: column; gap: 6px; }
+
+/* studio: brief, disc, swatches */
+.studio { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.brief { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+@media (max-width: 520px) { .brief { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.field { background: var(--panel); border: 1px solid var(--line); padding: 6px 8px; min-width: 0; }
+.field .k { display: block; font-size: 9px; }
+.field .v { font-family: var(--serif); font-size: 13px; display: block; min-height: 1.4em; overflow-wrap: anywhere; }
+.field .v.none { color: var(--dim); font-style: italic; }
+.field.need .k::after { content: " ·"; color: var(--accent); }
+
+.discbox { background: var(--panel); border: 1px solid var(--line); padding: 14px 12px 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.disc { position: relative; width: min(100%, 340px); aspect-ratio: 1; max-width: 100%; }
+.disc canvas, .disc svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.disc svg { touch-action: none; overflow: visible; }
+.disc .pin { cursor: grab; }
+.disc .pin:active { cursor: grabbing; }
+.disc.locked .pin { cursor: default; }
+.legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; color: var(--muted); font-size: 10px; letter-spacing: .08em; }
+.legend .ramp { display: inline-block; width: 46px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #fff, #ff2a00 50%, #000); vertical-align: 1px; margin-right: 6px; border: 1px solid var(--line); }
+.example { font-size: 10px; letter-spacing: .14em; color: var(--accent); }
+.harmony { font-family: var(--serif); font-style: italic; font-size: 14px; color: var(--muted); text-align: center; }
+
+.tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tools .sp { flex: 1; }
+.savemenu { position: relative; }
+.savemenu .menu { position: absolute; right: 0; top: calc(100% + 4px); background: var(--card); border: 1px solid var(--line); display: flex; flex-direction: column; z-index: 5; min-width: 190px; }
+.savemenu .menu button { border: 0; border-bottom: 1px solid var(--line); text-align: left; background: transparent; }
+.savemenu .menu button:last-child { border-bottom: 0; }
+
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.sw { background: var(--card); border: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
+.sw .chip { height: 64px; position: relative; }
+.sw .chip .tag { position: absolute; left: 6px; top: 5px; font-size: 8.5px; letter-spacing: .16em; padding: 1px 4px; border-radius: 2px; }
+.sw .chip .x { position: absolute; right: 4px; top: 4px; padding: 0 6px; font-size: 12px; line-height: 18px; letter-spacing: 0; background: rgba(255,255,255,.75); color: #1c1b19; border: 0; }
+.sw .body { padding: 6px 8px 8px; display: flex; flex-direction: column; gap: 2px; }
+.sw .name { font-family: var(--serif); font-style: italic; font-size: 14px; line-height: 1.25; overflow-wrap: anywhere; }
+.sw .role { font-family: var(--serif); font-size: 12px; color: var(--muted); line-height: 1.3; overflow-wrap: anywhere; }
+.sw .codes { font-size: 10.5px; color: var(--fg); font-variant-numeric: tabular-nums; margin-top: 3px; }
+.sw .codes span { color: var(--muted); display: block; font-size: 10px; }
+.sw .copy { display: flex; gap: 4px; margin-top: 4px; }
+.note { color: var(--dim); font-size: 10.5px; letter-spacing: .04em; line-height: 1.7; }
+.foot { border-top: 1px solid var(--line); padding-top: 8px; color: var(--dim); font-size: 10px; letter-spacing: .1em; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.foot a { color: var(--muted); }
+</style>
+
+<div class="wrap">
+  <header class="head">
+    <div class="brand">PALETTE_BUILDER</div>
+    <div class="ver">v4.0 · CO-CREATION ARTIFACT · <span id="engineTag">IN CLAUDE</span></div>
+  </header>
+
+  <details class="engine" id="engineBox" hidden>
+    <summary><span class="k">MODEL</span> <span id="engineSummary" class="eng-sum"></span></summary>
+    <div class="eng-grid">
+      <label for="srvUrl">SERVER</label>
+      <input type="text" id="srvUrl" spellcheck="false" autocomplete="off" placeholder="http://localhost:8000/v1">
+      <label for="srvModel">MODEL</label>
+      <input type="text" id="srvModel" spellcheck="false" autocomplete="off" placeholder="Qwen/Qwen3.8-27B-FP8">
+      <label for="srvKey">API KEY</label>
+      <input type="password" id="srvKey" spellcheck="false" autocomplete="off" placeholder="only if the server needs one">
+      <span class="eng-k">THINKING</span>
+      <label class="eng-check"><input type="checkbox" id="srvThink"> let the model reason before answering (slower)</label>
+    </div>
+    <div class="eng-row">
+      <button class="small" id="srvTest">TEST</button>
+      <button class="small" id="srvReset">DEFAULTS</button>
+      <span class="eng-status" id="srvStatus" role="status"></span>
+    </div>
+    <p class="eng-help">Runs against any OpenAI-compatible server. For Qwen3.8: <code>vllm serve Qwen/Qwen3.8-27B-FP8 --max-model-len 32768</code>. Settings, including the key, are kept only in this browser.</p>
+  </details>
+
+  <div class="notice" id="unavail" hidden>Claude is not available in this view, so the conversation is switched off. The disc and the example palette still work.</div>
+
+  <div class="status">
+    <div><span class="dot" id="dot"></span>STATUS: <b id="status">IDLE</b> <span id="elapsed"></span></div>
+    <div>COLOURS <b id="count">0</b> · TURNS <b id="turns">0</b></div>
+  </div>
+
+  <div class="err" id="err" role="alert" hidden></div>
+
+  <div class="main">
+    <section class="talk" aria-label="Conversation">
+      <div class="talk-head"><span class="k">CONVERSATION</span><button class="small" id="newBtn">NEW SESSION</button></div>
+      <div class="log" id="log" aria-live="polite"></div>
+      <div class="compose">
+        <textarea id="input" placeholder="Describe the painting or illustration you are planning…" aria-label="Your message"></textarea>
+        <div class="btns">
+          <button class="primary" id="sendBtn">SEND</button>
+          <button id="stopBtn" hidden>STOP</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="studio" aria-label="Palette">
+      <div class="brief" id="brief"></div>
+
+      <div class="discbox">
+        <div class="example" id="exampleTag">EXAMPLE PALETTE · SET BY HAND, NOT BY A MODEL</div>
+        <div class="disc" id="disc">
+          <canvas id="discCanvas" width="680" height="680" aria-hidden="true"></canvas>
+          <svg id="discSvg" viewBox="0 0 300 300" role="group" aria-label="Colour disc. Drag a colour, or focus it and use the arrow keys: left and right change hue, up and down change lightness."></svg>
+        </div>
+        <div class="legend"><span><span class="ramp"></span>centre white · middle ring full hue · edge black</span><span>drag the white-centred colour to move them all</span></div>
+        <div class="harmony" id="harmony"></div>
+      </div>
+
+      <div class="tools">
+        <button class="small" id="addBtn">+ COLOUR</button>
+        <button class="small" id="valueBtn" aria-pressed="false">VALUE</button>
+        <span class="sp"></span>
+        <button class="small" id="cssBtn">COPY CSS</button>
+        <div class="savemenu" id="saveGroup" hidden>
+          <button class="small" id="saveBtn" aria-expanded="false">SAVE ▾</button>
+          <div class="menu" id="saveMenu" hidden>
+            <button class="small" data-save="json">PALETTE · JSON</button>
+            <button class="small" data-save="svg">SWATCH CARD · SVG</button>
+            <button class="small" data-save="record">SESSION RECORD · JSON</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="swatches" id="swatches"></div>
+      <p class="note">Each swatch shows who set it: the model, or you. The session record keeps every change in order, with the conversation, so you can see afterwards how the palette was arrived at.</p>
+    </section>
+  </div>
+
+  <footer class="foot"><span>Palette Builder · Dan Bartlett · 2026</span><span>Esc stops a reply · Enter sends · Shift+Enter for a new line</span></footer>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const VERSION = 'Palette Builder v4.0';
+  const $ = id => document.getElementById(id);
+
+  // ---------- Colour model: a disc in hue and lightness ----------
+  // Angle is hue (0 at the top, clockwise). Radius is lightness: white at the centre,
+  // full-strength hue at the middle ring, black at the edge. Saturation follows from radius.
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  function hslToRgb(h, s, l) {
+    s /= 100; l /= 100;
+    const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+    const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
+  }
+  const satFor = l => Math.round(Math.min((1 - l / 100) / 0.5, 1) * 100);
+  const toHex = (r, g, b) => '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('').toUpperCase();
+  function colourAt(h, l) {
+    h = ((Math.round(h) % 360) + 360) % 360; l = clamp(Math.round(l), 0, 100);
+    const s = satFor(l), [r, g, b] = hslToRgb(h, s, l);
+    return { h, l, s, r, g, b, hex: toHex(r, g, b) };
+  }
+  function mk(h, l, extra) { return { ...colourAt(h, l), name: '', role: '', origin: 'model', ...extra }; }
+  // CIE L* from sRGB, used for the VALUE view: the grey a painter would squint to see.
+  function lstar(r, g, b) {
+    const lin = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+    const Y = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    return Math.round(Y > 0.008856 ? 116 * Math.cbrt(Y) - 16 : 903.3 * Y);
+  }
+  function greyFor(c) {
+    const L = lstar(c.r, c.g, c.b); // invert L* back to an sRGB grey
+    const Y = L > 8 ? Math.pow((L + 16) / 116, 3) : L / 903.3;
+    const v = Y <= 0.0031308 ? 12.92 * Y : 1.055 * Math.pow(Y, 1 / 2.4) - 0.055;
+    const n = Math.round(clamp(v, 0, 1) * 255);
+    return toHex(n, n, n);
+  }
+  const ink = c => (lstar(c.r, c.g, c.b) > 58 ? '#1c1b19' : '#f4f3ef');
+
+  // ---------- Instructions to the model ----------
+  const RULES = `You are helping a painter or illustrator plan a colour palette for one piece of work, through a short conversation. Talk as an experienced painter and colour teacher would: plainly and specifically, without flattery.
+
+HOW THE CONVERSATION RUNS
+- Ask one question per turn, and make it specific ("Are the shadows warm umber or cool violet?" rather than "What about the shadows?").
+- Before proposing any colours, find out four things: the medium; the subject and composition; the format and who will see it; the mood or feeling the work should carry. Ask in whatever order suits the conversation, and follow up on what the artist says.
+- Record a field in "gathered" only when the artist has actually told you; otherwise leave it null. Keep each entry to a few words, in the artist's terms.
+- The page will not show a palette until medium, subject and mood are recorded, so do not propose colours before then.
+- Then propose a palette of 3 to 6 colours, and keep asking questions that refine it. Revise the palette when the answers call for it.
+- A message that starts with ADJUSTMENT means the artist has moved or added a colour on the disc themselves. In two or three sentences, say what the change does: to temperature, to the value structure, to the harmony, and to the painting. Do not move it back unless asked. Use phase "commentary" unless you are proposing a revised palette.
+- An artist message may end with a line beginning "[Palette now:". That is the current palette, including the artist's own changes. Work from it.
+
+THE COLOUR DISC
+Colours sit on a disc by hue and lightness only:
+- h: hue angle, 0 to 359 (0 red, 60 yellow, 120 green, 180 cyan, 240 blue, 300 magenta)
+- l: lightness, 0 to 100. 100 is white at the centre, 50 is the full-strength hue on the middle ring, 0 is black at the edge.
+Saturation follows from position and cannot be set: full strength from l 50 down to black, paler towards white. Muted colours such as greys and earths cannot be shown exactly; choose the nearest hue and lightness, and say so when it matters.
+Give the palette a deliberate value structure, with at least one dark (l below 40) and one light (l above 60).
+Let the medium shape the advice: for example, transparent watercolour relies on the paper for its lights, while oil and acrylic can build lights with opaque paint.
+
+REPLY FORMAT
+Reply with one JSON object and nothing else: no Markdown, no code fences, no text before or after it. Keep this key order:
+{"gathered":{"medium":null,"subject":null,"format":null,"mood":null},"phase":"gathering","message":"...","colours":[],"harmony":"","suggestions":[]}
+- gathered: everything the artist has told you so far, carried over from earlier turns.
+- phase: "gathering", "palette" or "commentary".
+- message: what you say to the artist, under 120 words. When proposing a palette, say what job each colour does in the painting.
+- colours: only when phase is "palette", e.g. [{"h":215,"l":32,"name":"Harbour Shadow","role":"shadows and the hull"}]. Take names from the subject.
+- harmony: only with a palette; the relationship in plain words, such as "split-complementary around blue-violet".
+- suggestions: two to four short answers the artist might give to your question, or [].
+Use British spelling (colour, grey).`;
+
+  // ---------- State ----------
+  const EXAMPLE = [
+    mk(215, 30, { name: 'Harbour shadow', role: 'example', origin: 'example' }),
+    mk(38, 66, { name: 'Lamplight', role: 'example', origin: 'example' }),
+    mk(195, 74, { name: 'Evening sky', role: 'example', origin: 'example' }),
+    mk(258, 42, { name: 'Far shore', role: 'example', origin: 'example' }),
+  ];
+  const BLANK_BRIEF = () => ({ medium: null, subject: null, format: null, mood: null });
+  const GREETING = 'Tell me about the piece you are planning: what it shows, and what you are making it with.';
+  const state = {
+    engine: 'claude', sample: null, downloads: null, busy: false, ctl: null, startedAt: null,
+    turns: [], log: [], colours: EXAMPLE.map(c => ({ ...c })), harmony: '', example: true,
+    brief: BLANK_BRIEF(), record: [], started: new Date().toISOString(), valueView: false,
+  };
+  const SESSION_KEY = 'palette-builder:session';
+  function saveSession() {
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify({ turns: state.turns, log: state.log, colours: state.colours, harmony: state.harmony, example: state.example, brief: state.brief, record: state.record, started: state.started })); } catch {}
+  }
+  function loadSession() {
+    try {
+      const s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+      if (!s || !Array.isArray(s.turns) || !Array.isArray(s.log)) return false;
+      Object.assign(state, { turns: s.turns, log: s.log, colours: (s.colours || []).map(c => ({ ...mk(c.h, c.l), name: c.name || '', role: c.role || '', origin: c.origin || 'model' })), harmony: s.harmony || '', example: !!s.example, brief: { ...BLANK_BRIEF(), ...(s.brief || {}) }, record: s.record || [], started: s.started || state.started });
+      if (!state.colours.length) { state.colours = EXAMPLE.map(c => ({ ...c })); state.example = true; }
+      return true;
+    } catch { return false; }
+  }
+  const note = (type, data) => state.record.push({ at: new Date().toISOString(), type, ...data });
+  const snapshot = () => state.colours.map(c => ({ name: c.name, hex: c.hex, h: c.h, l: c.l, origin: c.origin }));
+
+  // ---------- Status and errors ----------
+  let tick = null;
+  function setStatus(text, kind) {
+    $('status').textContent = text; $('dot').className = 'dot' + (kind ? ' ' + kind : '');
+    clearInterval(tick); $('elapsed').textContent = '';
+    if (kind === 'busy') { const t0 = Date.now(); tick = setInterval(() => { $('elapsed').textContent = Math.round((Date.now() - t0) / 1000) + ' s'; }, 500); }
+  }
+  const ERROR_COPY = {
+    not_granted: 'Claude access was not allowed for this page. Reload the page to be asked again.',
+    sampling_disabled: 'Claude is not available on this account.',
+    not_declared: 'This version of the page cannot call Claude.',
+    capability_disabled: 'Claude is not available in this view.',
+    capability_removed: 'This Claude app is too old to run the conversation. Update the app and try again.',
+    rate_limited: 'Too many replies in a short time, or your usage limit was reached. Wait a minute, then send again.',
+    session_expired: 'Your Claude session has expired. Sign in again, then reload this page.',
+    refused: 'Claude declined to answer that. Try rephrasing it.',
+    empty_completion: 'The reply was empty. Send again.',
+    invalid_json: 'The reply was not in the expected format. Send again; your message is back in the box.',
+    prompt_too_large: 'The conversation has grown too long. Save the session record, then start a new session.',
+    unreachable: 'Could not reach the model server. Check that it is running at the address under MODEL, then press TEST. If you opened this page from a website rather than a file on your computer, your browser may be blocking the connection: download the page and open the file instead.',
+    http_error: 'The model server returned an error.',
+    truncated: 'The reply ran out of room before it finished. Send again, or switch thinking off under MODEL.',
+  };
+  function showError(e) {
+    const code = e && e.code;
+    const base = ERROR_COPY[code] || 'Something went wrong with that reply. Send again.';
+    $('err').textContent = base + (code === 'http_error' && e.message ? ' (' + e.message + ')' : '');
+    $('err').hidden = false;
+  }
+  const clearError = () => { $('err').hidden = true; $('err').textContent = ''; };
+
+  // ---------- Engines ----------
+  // Inside Claude: the page asks Claude through the artifact runtime (claude.use("sample")),
+  // on the viewer's own account. Anywhere else: an OpenAI-compatible server such as vLLM,
+  // by default running Qwen/Qwen3.8-27B-FP8, the same default as Sketch Lab.
+  const IN_CLAUDE = !!(window.claude && typeof window.claude.use === 'function');
+  state.engine = IN_CLAUDE ? 'claude' : 'local';
+  const LOCAL_DEFAULTS = { url: 'http://localhost:8000/v1', model: 'Qwen/Qwen3.8-27B-FP8', key: '', thinking: false };
+  const LOCAL_KEY = 'palette-builder:local-engine';
+  let local = { ...LOCAL_DEFAULTS };
+  try { local = { ...LOCAL_DEFAULTS, ...JSON.parse(localStorage.getItem(LOCAL_KEY) || '{}') }; } catch {}
+  const engineReady = () => state.engine === 'claude' ? !!state.sample : !!(local.url && local.model);
+  const engineName = () => state.engine === 'claude' ? 'Claude (in-app)' : local.model;
+  const baseUrl = () => String(local.url || '').trim().replace(/\/+$/, '').replace(/\/chat\/completions$/, '');
+  const authHeaders = () => local.key ? { Authorization: 'Bearer ' + local.key } : {};
+
+  function parseModelJson(text) {
+    let t = String(text || '');
+    t = t.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/^[\s\S]*<\/think>/i, '').trim();
+    const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fence) t = fence[1].trim();
+    const a = t.indexOf('{'), b = t.lastIndexOf('}');
+    if (a === -1 || b <= a) throw { code: 'invalid_json', message: 'No JSON object in reply', text };
+    try { return JSON.parse(t.slice(a, b + 1)); } catch (e) { throw { code: 'invalid_json', message: e.message, text }; }
+  }
+
+  async function callLocal(turns, signal) {
+    const think = !!local.thinking;
+    const body = {
+      model: local.model,
+      messages: [{ role: 'system', content: RULES }, ...turns],
+      max_tokens: think ? 8192 : 2048,
+      stream: true,
+      // Qwen's recommended sampling, except presence_penalty: a JSON reply repeats its keys, so it stays at 0.
+      temperature: think ? 1.0 : 0.7, top_p: think ? 0.95 : 0.8, top_k: 20, presence_penalty: 0,
+      chat_template_kwargs: { enable_thinking: think },
+    };
+    let resp;
+    try {
+      resp = await fetch(baseUrl() + '/chat/completions', { method: 'POST', signal, headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(body) });
+    } catch (e) {
+      if (signal.aborted) throw { code: 'cancelled' };
+      throw { code: 'unreachable', message: String(e && e.message || e) };
+    }
+    if (!resp.ok) { let d = ''; try { d = (await resp.text()).slice(0, 300); } catch {} throw { code: 'http_error', message: `HTTP ${resp.status} ${d}` }; }
+    let text = '', finish = null, buf = '';
+    const reader = resp.body.getReader(), dec = new TextDecoder();
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n'); buf = lines.pop();
+        for (const line of lines) {
+          const s = line.trim();
+          if (!s.startsWith('data:')) continue;
+          const p = s.slice(5).trim();
+          if (p === '[DONE]') continue;
+          let j; try { j = JSON.parse(p); } catch { continue; }
+          const ch = j.choices && j.choices[0];
+          if (!ch) continue;
+          if (ch.delta && ch.delta.content) text += ch.delta.content;
+          if (ch.finish_reason) finish = ch.finish_reason;
+        }
+      }
+    } catch (e) {
+      if (signal.aborted) throw { code: 'cancelled' };
+      throw { code: 'unreachable', message: String(e && e.message || e) };
+    }
+    if (finish === 'length') throw { code: 'truncated' };
+    return parseModelJson(text);
+  }
+
+  async function callModel(turns, signal) {
+    if (state.engine === 'claude') {
+      // sample() has no system prompt, so the instructions go in as a leading user turn.
+      const { text, truncated } = await state.sample([{ role: 'user', content: RULES }, ...turns], { signal, cache: false, modelTier: 'default' });
+      if (truncated) throw { code: 'truncated' };
+      return parseModelJson(text);
+    }
+    return callLocal(turns, signal);
+  }
+
+  // ---------- The conversation ----------
+  const REQUIRED = ['medium', 'subject', 'mood'];
+  const briefReady = () => REQUIRED.every(k => state.brief[k]);
+  function paletteLine() {
+    if (state.example || !state.colours.length) return '';
+    const who = { model: 'set by model', moved: 'moved by artist', added: 'added by artist' };
+    return '\n\n[Palette now: ' + state.colours.map((c, i) => `${c.name || 'Colour ' + (i + 1)} ${c.hex} (h ${c.h}, l ${c.l}, ${who[c.origin] || c.origin})`).join('; ') + ']';
+  }
+
+  function applyReply(obj) {
+    if (!obj || typeof obj !== 'object') throw { code: 'invalid_json', message: 'Not an object' };
+    const g = obj.gathered || {};
+    for (const k of Object.keys(state.brief)) {
+      const v = g[k] ?? (k === 'format' ? g.audience : undefined);
+      if (typeof v === 'string' && v.trim()) state.brief[k] = v.trim().slice(0, 80);
+    }
+    let held = false;
+    const list = Array.isArray(obj.colours) ? obj.colours : [];
+    if (obj.phase === 'palette' && list.length) {
+      if (!briefReady()) held = true;
+      else {
+        const next = list.slice(0, 8).filter(c => c && isFinite(+c.h) && isFinite(+c.l)).map(c => mk(+c.h, +c.l, { name: String(c.name || '').slice(0, 40), role: String(c.role || '').slice(0, 90), origin: 'model' }));
+        if (next.length >= 2) {
+          state.colours = next; state.example = false;
+          state.harmony = String(obj.harmony || '').slice(0, 90);
+          note('palette_from_model', { harmony: state.harmony, colours: snapshot() });
+        }
+      }
+    }
+    const message = String(obj.message || '').trim() || '(no message)';
+    const suggestions = Array.isArray(obj.suggestions) ? obj.suggestions.filter(s => typeof s === 'string' && s.trim()).slice(0, 4) : [];
+    state.log.push({ kind: 'ai', text: message, suggestions });
+    if (held) state.log.push({ kind: 'held', text: 'A palette was proposed before the medium, subject and mood were all recorded, so it is held back. Answer the question above and it will come.' });
+    note('reply', { phase: obj.phase || '', message, gathered: { ...state.brief }, held });
+  }
+
+  async function ask(text, opts = {}) {
+    if (state.busy || !engineReady()) return false;
+    clearError();
+    const content = text + paletteLine();
+    state.turns.push({ role: 'user', content });
+    if (opts.action) state.log.push({ kind: 'act', text: opts.action, hex: opts.hex });
+    else state.log.push({ kind: 'you', text });
+    note(opts.action ? 'adjustment_sent' : 'artist', { text: opts.action || text });
+    state.busy = true; state.ctl = new AbortController();
+    setStatus(opts.action ? 'READING THE CHANGE' : 'THINKING', 'busy');
+    render();
+    try {
+      const obj = await callModel(state.turns, state.ctl.signal);
+      applyReply(obj);
+      state.turns.push({ role: 'assistant', content: JSON.stringify(obj) });
+      setStatus('READY', 'done');
+      saveSession();
+      return true;
+    } catch (e) {
+      state.turns.pop();
+      const last = state.log[state.log.length - 1];
+      if (last && (last.kind === 'you' || last.kind === 'act') && !opts.action) state.log.pop();
+      note('error', { code: (e && e.code) || 'unknown' });
+      if (e && e.code === 'cancelled') setStatus('STOPPED', '');
+      else { setStatus('ERROR', 'err'); showError(e); }
+      if (!opts.action) { $('input').value = text; }
+      if (e && e.code === 'not_granted') { state.sample = null; $('unavail').hidden = false; }
+      return false;
+    } finally {
+      state.busy = false; state.ctl = null; render(); saveSession();
+    }
+  }
+
+  function send() {
+    const t = $('input').value.trim();
+    if (!t) return;
+    $('input').value = '';
+    ask(t);
+  }
+
+  // ---------- Rendering ----------
+  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function renderLog() {
+    const log = $('log'); log.textContent = '';
+    const g = el('div', 'msg ai'); g.append(el('span', 'who', 'MODEL'), el('p', null, GREETING)); log.append(g);
+    state.log.forEach((m, i) => {
+      if (m.kind === 'you') log.append(el('div', 'msg you', m.text));
+      else if (m.kind === 'act') { const a = el('div', 'act'); const d = el('i'); d.style.background = m.hex || 'transparent'; a.append(d, document.createTextNode(m.text)); log.append(a); }
+      else if (m.kind === 'held' || m.kind === 'info') log.append(el('div', 'held', m.text));
+      else {
+        const b = el('div', 'msg ai'); b.append(el('span', 'who', 'MODEL'));
+        String(m.text).split(/\n{2,}/).forEach(p => b.append(el('p', null, p)));
+        log.append(b);
+        if (i === state.log.length - 1 && m.suggestions && m.suggestions.length && !state.busy) {
+          const c = el('div', 'chips');
+          m.suggestions.forEach(s => { const btn = el('button', null, s); btn.addEventListener('click', () => ask(s)); c.append(btn); });
+          log.append(c);
+        }
+      }
+    });
+    if (state.busy) log.append(el('div', 'typing', state.engine === 'claude' ? 'Claude is thinking…' : 'The model is thinking…'));
+    log.scrollTop = log.scrollHeight;
+  }
+  function renderBrief() {
+    const labels = { medium: 'MEDIUM', subject: 'SUBJECT', format: 'FORMAT & AUDIENCE', mood: 'MOOD' };
+    const b = $('brief'); b.textContent = '';
+    for (const k of Object.keys(labels)) {
+      const f = el('div', 'field' + (REQUIRED.includes(k) && !state.brief[k] ? ' need' : ''));
+      f.title = REQUIRED.includes(k) ? 'Needed before a palette is shown' : 'Asked about, not required';
+      f.append(el('span', 'k', labels[k]), el('span', 'v' + (state.brief[k] ? '' : ' none'), state.brief[k] || 'not yet'));
+      b.append(f);
+    }
+  }
+  const TAGS = { model: 'MODEL', moved: 'MOVED BY YOU', added: 'ADDED BY YOU', example: 'EXAMPLE' };
+  function renderSwatches() {
+    const box = $('swatches'); box.textContent = '';
+    state.colours.forEach((c, i) => {
+      const sw = el('div', 'sw');
+      const chip = el('div', 'chip'); chip.style.background = state.valueView ? greyFor(c) : c.hex;
+      const tag = el('span', 'tag', (i === 0 ? 'BASE · ' : '') + (TAGS[c.origin] || c.origin.toUpperCase()));
+      tag.style.color = ink(c); // the grey in VALUE view has the same L*, so the same ink works on both
+      chip.append(tag);
+      if (!state.example && state.colours.length > 2 && i > 0) {
+        const x = el('button', 'x', '×'); x.title = 'Remove this colour'; x.setAttribute('aria-label', 'Remove ' + (c.name || 'colour ' + (i + 1)));
+        x.disabled = state.busy; x.addEventListener('click', () => removeColour(i)); chip.append(x);
+      }
+      const body = el('div', 'body');
+      body.append(el('div', 'name', c.name || 'Untitled'));
+      if (c.role && c.origin !== 'example') body.append(el('div', 'role', c.role));
+      const codes = el('div', 'codes', c.hex);
+      codes.append(el('span', null, `rgb(${c.r}, ${c.g}, ${c.b})`), el('span', null, `H ${c.h}° · L ${c.l} · value L* ${lstar(c.r, c.g, c.b)}`));
+      body.append(codes);
+      const cp = el('div', 'copy');
+      [['HEX', c.hex], ['RGB', `rgb(${c.r}, ${c.g}, ${c.b})`]].forEach(([lab, val]) => {
+        const btn = el('button', 'small', lab); btn.addEventListener('click', () => copyText(val, btn, lab)); cp.append(btn);
+      });
+      body.append(cp);
+      sw.append(chip, body); box.append(sw);
+    });
+  }
+  function render() {
+    renderLog(); renderBrief(); renderSwatches(); drawPins();
+    $('exampleTag').hidden = !state.example;
+    $('harmony').textContent = state.example ? '' : state.harmony;
+    $('count').textContent = String(state.colours.length);
+    $('turns').textContent = String(state.turns.filter(t => t.role === 'assistant').length);
+    $('sendBtn').disabled = state.busy || !engineReady();
+    $('stopBtn').hidden = !state.busy;
+    $('addBtn').disabled = state.busy || state.example || state.colours.length >= 8;
+    $('newBtn').disabled = state.busy;
+    $('disc').classList.toggle('locked', state.busy || state.example);
+    $('valueBtn').setAttribute('aria-pressed', String(state.valueView));
+  }
+
+  // ---------- The disc ----------
+  const C = 150, R = 140; // SVG units
+  const discCache = {};
+  function paintDisc() {
+    const cv = $('discCanvas'), N = cv.width, key = state.valueView ? 'v' : 'c';
+    const ctx = cv.getContext('2d');
+    if (!discCache[key]) {
+      const img = ctx.createImageData(N, N), cx = (N - 1) / 2, rad = N * (R / 300);
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        const i = (y * N + x) * 4, dx = x - cx, dy = y - cx, d = Math.sqrt(dx * dx + dy * dy);
+        if (d > rad + 1) continue;
+        const rn = Math.min(d / rad, 1), hue = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360;
+        const l = (1 - rn) * 100, s = Math.min(rn / 0.5, 1) * 100;
+        let [r, g, b] = hslToRgb(hue, s, l);
+        if (key === 'v') { const gg = parseInt(greyFor({ r, g, b }).slice(1, 3), 16); r = g = b = gg; }
+        img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = Math.round(255 * clamp(rad + 1 - d, 0, 1));
+      }
+      discCache[key] = img;
+    }
+    ctx.putImageData(discCache[key], 0, 0);
+  }
+  const pos = c => { const r = (1 - c.l / 100) * R, a = (c.h - 90) * Math.PI / 180; return { x: C + r * Math.cos(a), y: C + r * Math.sin(a) }; };
+  function fromPoint(x, y) {
+    const dx = x - C, dy = y - C, d = Math.min(R, Math.sqrt(dx * dx + dy * dy));
+    return { h: (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360, l: (1 - d / R) * 100 };
+  }
+  const NS = 'http://www.w3.org/2000/svg';
+  function svg(tag, attrs) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; }
+  let drag = null;
+  function drawPins() {
+    const s = $('discSvg'); s.textContent = '';
+    const cs = drag ? drag.live : state.colours;
+    for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) {
+      const a = pos(cs[i]), b = pos(cs[j]);
+      s.append(svg('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: 'rgba(0,0,0,.28)', 'stroke-width': .7, 'stroke-dasharray': '2 3' }));
+    }
+    cs.forEach((c, i) => {
+      const p = pos(c), base = i === 0, rr = base ? 10 : 8;
+      const g = svg('g', { class: 'pin', tabindex: (state.busy || state.example) ? '-1' : '0', role: 'slider', 'aria-label': `${c.name || 'Colour ' + (i + 1)}${base ? ', base colour, moves all' : ''}: hue ${c.h} degrees, lightness ${c.l}`, 'aria-valuetext': c.hex });
+      const fill = state.valueView ? greyFor(c) : c.hex;
+      g.append(svg('circle', { cx: p.x, cy: p.y, r: rr + 3, fill: 'rgba(255,255,255,.55)' }));
+      g.append(svg('circle', { cx: p.x, cy: p.y, r: rr, fill, stroke: '#1c1b19', 'stroke-width': 1.2 }));
+      if (base) g.append(svg('circle', { cx: p.x, cy: p.y, r: 3.2, fill: '#fff', stroke: '#1c1b19', 'stroke-width': .8 }));
+      g.addEventListener('pointerdown', e => startDrag(e, i));
+      g.addEventListener('keydown', e => keyMove(e, i));
+      s.append(g);
+    });
+    if (drag) {
+      const c = drag.live[drag.i];
+      const t = svg('text', { x: C, y: 296, 'text-anchor': 'middle', 'font-size': 9, 'font-family': 'IBM Plex Mono, monospace', fill: 'currentColor' });
+      t.textContent = `${c.hex} · H ${c.h}° · L ${c.l}`;
+      s.append(t);
+    }
+  }
+  function svgPoint(e) { const r = $('discSvg').getBoundingClientRect(); return { x: (e.clientX - r.left) * 300 / r.width, y: (e.clientY - r.top) * 300 / r.height }; }
+  function moveTo(live, start, i, h, l, origin) {
+    if (i === 0) {
+      let dh = h - origin.h; if (dh > 180) dh -= 360; if (dh < -180) dh += 360;
+      const dl = l - origin.l;
+      return start.map(c => ({ ...c, ...colourAt(c.h + dh, clamp(c.l + dl, 2, 98)) }));
+    }
+    return live.map((c, k) => k === i ? { ...c, ...colourAt(h, clamp(l, 2, 98)) } : c);
+  }
+  function startDrag(e, i) {
+    if (state.busy || state.example) return;
+    e.preventDefault();
+    const p = svgPoint(e), start = state.colours.map(c => ({ ...c }));
+    const origin = i === 0 ? fromPoint(p.x, p.y) : null;
+    drag = { i, start, live: start.map(c => ({ ...c })), origin, moved: false };
+    // Capture on the disc itself: the pins are redrawn while dragging, so a pin cannot hold the capture.
+    const tgt = $('discSvg'); try { tgt.setPointerCapture(e.pointerId); } catch {}
+    const move = ev => {
+      const q = svgPoint(ev), f = fromPoint(q.x, q.y);
+      drag.live = moveTo(drag.live, drag.start, i, f.h, f.l, drag.origin || f);
+      drag.moved = true; drawPins();
+    };
+    const up = () => {
+      tgt.removeEventListener('pointermove', move); tgt.removeEventListener('pointerup', up); tgt.removeEventListener('pointercancel', up);
+      const d = drag; drag = null;
+      if (d && d.moved) commitMove(d.i, d.start, d.live); else drawPins();
+    };
+    tgt.addEventListener('pointermove', move); tgt.addEventListener('pointerup', up); tgt.addEventListener('pointercancel', up);
+  }
+  let keyTimer = null, keyStart = null;
+  function keyMove(e, i) {
+    const steps = { ArrowLeft: [-5, 0], ArrowRight: [5, 0], ArrowUp: [0, 5], ArrowDown: [0, -5] }[e.key];
+    if (!steps || state.busy || state.example) return;
+    e.preventDefault();
+    if (!keyStart) keyStart = state.colours.map(c => ({ ...c }));
+    const c = state.colours[i];
+    const next = moveTo(state.colours, state.colours, i, c.h + steps[0], c.l + steps[1], c);
+    state.colours = next.map((x, k) => ({ ...x, origin: x.hex !== state.colours[k].hex ? (state.colours[k].origin === 'added' ? 'added' : 'moved') : x.origin }));
+    renderSwatches(); drawPins();
+    const focusAgain = () => { const pins = $('discSvg').querySelectorAll('.pin'); pins[i] && pins[i].focus(); };
+    focusAgain();
+    clearTimeout(keyTimer);
+    keyTimer = setTimeout(() => { const s = keyStart; keyStart = null; commitMove(i, s, state.colours.map(c => ({ ...c }))); focusAgain(); }, 900);
+  }
+  function commitMove(i, start, live) {
+    const changed = live.map((c, k) => c.hex !== start[k].hex);
+    if (!changed.some(Boolean)) { drawPins(); return; }
+    state.colours = live.map((c, k) => ({ ...c, origin: changed[k] ? (start[k].origin === 'added' ? 'added' : 'moved') : start[k].origin }));
+    const who = start[i].name || 'Colour ' + (i + 1);
+    const desc = i === 0
+      ? `moved the base colour "${who}" from ${start[0].hex} to ${state.colours[0].hex}, which shifted the whole palette with it`
+      : `moved "${who}" from ${start[i].hex} (h ${start[i].h}, l ${start[i].l}) to ${state.colours[i].hex} (h ${state.colours[i].h}, l ${state.colours[i].l})`;
+    note('artist_moved', { colour: who, from: start[i].hex, to: state.colours[i].hex, whole_palette: i === 0, colours: snapshot() });
+    const label = i === 0 ? `You moved the whole palette → ${state.colours[0].hex}` : `You moved ${who} → ${state.colours[i].hex}`;
+    saveSession();
+    if (engineReady()) ask('ADJUSTMENT: The artist ' + desc + '.', { action: label, hex: state.colours[i].hex });
+    else { state.log.push({ kind: 'act', text: label, hex: state.colours[i].hex }); render(); }
+  }
+  function gapHue() {
+    const hs = state.colours.map(c => c.h).sort((a, b) => a - b);
+    let best = 0, at = hs[0];
+    hs.forEach((h, k) => { const n = hs[(k + 1) % hs.length], g = k < hs.length - 1 ? n - h : 360 - h + hs[0]; if (g > best) { best = g; at = h; } });
+    return (at + best / 2) % 360;
+  }
+  function addColour() {
+    if (state.busy || state.example || state.colours.length >= 8) return;
+    const c = mk(gapHue(), 50, { name: 'New colour', role: '', origin: 'added' });
+    state.colours.push(c);
+    note('artist_added', { hex: c.hex, colours: snapshot() });
+    saveSession();
+    const label = `You added a colour → ${c.hex}`;
+    if (engineReady()) ask(`ADJUSTMENT: The artist added a new colour at ${c.hex} (h ${c.h}, l ${c.l}), in the widest gap between the existing hues. Suggest what job it could do in this painting and where on the disc they might move it.`, { action: label, hex: c.hex });
+    else { state.log.push({ kind: 'act', text: label, hex: c.hex }); render(); }
+  }
+  function removeColour(i) {
+    if (state.busy || i === 0) return;
+    const [c] = state.colours.splice(i, 1);
+    note('artist_removed', { colour: c.name, hex: c.hex, colours: snapshot() });
+    state.log.push({ kind: 'act', text: `You removed ${c.name || 'a colour'} (${c.hex})`, hex: c.hex });
+    saveSession(); render();
+  }
+
+  // ---------- Copy and save ----------
+  async function copyText(text, btn, label) {
+    try { await navigator.clipboard.writeText(text); btn.textContent = 'COPIED'; }
+    catch {
+      // Some app views refuse the clipboard; fall back to a selected copy.
+      btn.textContent = 'NOT COPIED';
+      const t = el('textarea'); t.value = text; document.body.append(t); t.select();
+      try { if (document.execCommand('copy')) btn.textContent = 'COPIED'; } catch {}
+      t.remove();
+    }
+    setTimeout(() => { btn.textContent = label; }, 1200);
+  }
+  const slug = s => String(s || 'colour').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'colour';
+  function cssText() {
+    return ':root {\n' + state.colours.map((c, i) => `  --${slug(c.name) || 'colour-' + (i + 1)}: ${c.hex};${i === 0 ? ' /* base */' : ''}`).join('\n') + '\n}\n';
+  }
+  function paletteJson() {
+    return JSON.stringify({ tool: VERSION, created: new Date().toISOString(), engine: state.engine, model: engineName(), brief: state.brief, harmony: state.harmony,
+      colours: state.colours.map((c, i) => ({ name: c.name, role: c.role, hex: c.hex, rgb: [c.r, c.g, c.b], hsl: [c.h, c.s, c.l], value_lstar: lstar(c.r, c.g, c.b), set_by: c.origin, base: i === 0 })) }, null, 2);
+  }
+  function recordJson() {
+    return JSON.stringify({ tool: VERSION, engine: state.engine, model: engineName(), started: state.started, saved: new Date().toISOString(), brief: state.brief,
+      final_palette: snapshot(), conversation: state.log.filter(m => m.kind !== 'info').map(m => ({ who: m.kind === 'you' ? 'artist' : m.kind === 'act' ? 'artist (on the disc)' : m.kind === 'held' ? 'page' : 'model', text: m.text })),
+      events: state.record, instructions: RULES }, null, 2);
+  }
+  function swatchSvg() {
+    const w = 640, rowH = 92, h = 70 + state.colours.length * rowH;
+    const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+    let out = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect width="${w}" height="${h}" fill="#e8e8e5"/>`;
+    out += `<text x="24" y="38" font-family="Georgia, serif" font-size="20" fill="#1c1b19">${esc(state.brief.subject || 'Palette')}</text><text x="24" y="58" font-family="Menlo, monospace" font-size="11" fill="#5e5d58">${esc([state.brief.medium, state.harmony].filter(Boolean).join(' · '))}</text>`;
+    state.colours.forEach((c, i) => {
+      const y = 70 + i * rowH;
+      out += `<rect x="24" y="${y}" width="110" height="${rowH - 14}" fill="${c.hex}"/><rect x="140" y="${y}" width="30" height="${rowH - 14}" fill="${greyFor(c)}"/>`;
+      out += `<text x="186" y="${y + 24}" font-family="Georgia, serif" font-style="italic" font-size="17" fill="#1c1b19">${esc(c.name || 'Colour ' + (i + 1))}</text>`;
+      out += `<text x="186" y="${y + 44}" font-family="Menlo, monospace" font-size="12" fill="#1c1b19">${c.hex}   rgb(${c.r}, ${c.g}, ${c.b})</text>`;
+      out += `<text x="186" y="${y + 62}" font-family="Menlo, monospace" font-size="11" fill="#5e5d58">H ${c.h}  L ${c.l}  value L* ${lstar(c.r, c.g, c.b)}  ·  ${esc(TAGS[c.origin] || c.origin)}</text>`;
+    });
+    return out + '</svg>';
+  }
+  async function save(kind) {
+    $('saveMenu').hidden = true; $('saveBtn').setAttribute('aria-expanded', 'false');
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+    const files = { json: [`palette-${stamp}.json`, paletteJson(), 'application/json'], svg: [`palette-card-${stamp}.svg`, swatchSvg(), 'image/svg+xml'], record: [`palette-session-${stamp}.json`, recordJson(), 'application/json'] };
+    const [filename, data, type] = files[kind];
+    if (state.engine === 'claude') {
+      if (!state.downloads) return;
+      try { await state.downloads.save({ filename, data }); }
+      catch (e) { if (e && e.code !== 'declined') { $('err').textContent = 'The file could not be saved here (' + (e.code || 'error') + ').'; $('err').hidden = false; } }
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([data], { type }));
+    const a = el('a'); a.href = url; a.download = filename; document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  // ---------- Controls ----------
+  $('sendBtn').addEventListener('click', send);
+  $('input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+  $('stopBtn').addEventListener('click', () => state.ctl && state.ctl.abort());
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (state.ctl) state.ctl.abort(); $('saveMenu').hidden = true; } });
+  $('addBtn').addEventListener('click', addColour);
+  $('valueBtn').addEventListener('click', () => { state.valueView = !state.valueView; paintDisc(); render(); });
+  $('cssBtn').addEventListener('click', e => copyText(cssText(), e.currentTarget, 'COPY CSS'));
+  $('saveBtn').addEventListener('click', () => { const m = $('saveMenu'); m.hidden = !m.hidden; $('saveBtn').setAttribute('aria-expanded', String(!m.hidden)); });
+  $('saveMenu').addEventListener('click', e => { const k = e.target.closest('[data-save]'); if (k) save(k.dataset.save); });
+  let confirmNew = false;
+  $('newBtn').addEventListener('click', () => {
+    if (state.busy) return;
+    if (state.turns.length && !confirmNew) { confirmNew = true; $('newBtn').textContent = 'CLEAR ALL?'; setTimeout(() => { confirmNew = false; $('newBtn').textContent = 'NEW SESSION'; }, 3000); return; }
+    confirmNew = false; $('newBtn').textContent = 'NEW SESSION';
+    Object.assign(state, { turns: [], log: [], colours: EXAMPLE.map(c => ({ ...c })), harmony: '', example: true, brief: BLANK_BRIEF(), record: [], started: new Date().toISOString() });
+    try { localStorage.removeItem(SESSION_KEY); } catch {}
+    clearError(); setStatus('IDLE', ''); render();
+  });
+
+  // ---------- Local engine settings (only outside Claude) ----------
+  const eng = { box: $('engineBox'), sum: $('engineSummary'), tag: $('engineTag'), url: $('srvUrl'), model: $('srvModel'), key: $('srvKey'), think: $('srvThink'), test: $('srvTest'), reset: $('srvReset'), status: $('srvStatus') };
+  const shortModel = m => String(m || '').split('/').pop();
+  function syncEngineUi() {
+    eng.url.value = local.url; eng.model.value = local.model; eng.key.value = local.key; eng.think.checked = !!local.thinking;
+    eng.sum.textContent = `${shortModel(local.model)} · ${baseUrl()}${local.thinking ? ' · thinking on' : ''}`;
+    eng.tag.textContent = 'LOCAL · ' + shortModel(local.model).toUpperCase();
+  }
+  function saveLocal() {
+    local = { url: eng.url.value.trim(), model: eng.model.value.trim(), key: eng.key.value, thinking: eng.think.checked };
+    try { localStorage.setItem(LOCAL_KEY, JSON.stringify(local)); } catch {}
+    syncEngineUi(); eng.status.textContent = ''; eng.status.className = 'eng-status'; render();
+  }
+  [eng.url, eng.model, eng.key].forEach(i => i.addEventListener('change', saveLocal));
+  eng.think.addEventListener('change', saveLocal);
+  eng.reset.addEventListener('click', () => { local = { ...LOCAL_DEFAULTS }; syncEngineUi(); saveLocal(); });
+  eng.test.addEventListener('click', async () => {
+    saveLocal(); eng.status.className = 'eng-status'; eng.status.textContent = 'checking…'; eng.test.disabled = true;
+    try {
+      const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 8000);
+      const r = await fetch(baseUrl() + '/models', { headers: authHeaders(), signal: ctl.signal });
+      clearTimeout(t);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const ids = ((await r.json()).data || []).map(m => m.id);
+      if (ids.includes(local.model)) { eng.status.className = 'eng-status ok'; eng.status.textContent = `connected · ${local.model} is loaded`; }
+      else { eng.status.className = 'eng-status bad'; eng.status.textContent = `connected, but ${local.model} is not loaded. The server has: ${ids.join(', ') || 'nothing'}`; }
+    } catch (e) {
+      eng.status.className = 'eng-status bad';
+      eng.status.textContent = `no answer from ${baseUrl()} (${e.name === 'AbortError' ? 'timed out' : (e.message || 'blocked')}). Is the server running?`;
+    } finally { eng.test.disabled = false; }
+  });
+
+  // ---------- Start ----------
+  loadSession();
+  paintDisc();
+  if (!IN_CLAUDE) {
+    eng.box.hidden = false;
+    let hasSaved = false; try { hasSaved = !!localStorage.getItem(LOCAL_KEY); } catch {}
+    if (!hasSaved) eng.box.open = true;   // first visit: show where the model is set
+    syncEngineUi(); $('saveGroup').hidden = false;
+  }
+  render();
+  // Capabilities light up when they resolve; the page works without them.
+  if (IN_CLAUDE) {
+    $('sendBtn').disabled = true;
+    window.claude.use('sample').then(s => {
+      if (!s) { $('unavail').hidden = false; return; }
+      state.sample = s; render();
+    }).catch(() => { $('unavail').hidden = false; });
+    window.claude.use('downloads').then(d => { if (!d) return; state.downloads = d; $('saveGroup').hidden = false; }).catch(() => {});
+  }
+})();
+</script>
